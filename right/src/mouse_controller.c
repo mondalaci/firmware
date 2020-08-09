@@ -17,6 +17,9 @@
 static uint32_t mouseUsbReportUpdateTime = 0;
 static uint32_t mouseElapsedTime;
 
+uint8_t LastMouseActivityType = 0;
+uint8_t LastMouseActivityStateCode = 0;
+
 bool ActiveMouseStates[ACTIVE_MOUSE_STATES_COUNT];
 
 mouse_kinetic_state_t MouseMoveState = {
@@ -34,6 +37,19 @@ mouse_kinetic_state_t MouseMoveState = {
     .baseSpeed = 40,
     .acceleratedSpeed = 80,
 };
+
+/** uninitialized fields:
+typedef struct {
+    bool wasMoveAction;
+    mouse_speed_t prevMouseSpeed;
+    float currentSpeed;
+    float targetSpeed;
+    float xSum;
+    float ySum;
+    int16_t xOut;
+    int16_t yOut;
+} mouse_kinetic_state_t;
+*/
 
 mouse_kinetic_state_t MouseScrollState = {
     .isScroll = true,
@@ -194,22 +210,46 @@ static void processMouseKineticState(mouse_kinetic_state_t *kineticState)
     kineticState->wasMoveAction = isMoveAction;
 }
 
+static uint8_t computeStateCode() {
+    uint8_t activityCode = 0;
+    for( int i = 0; i < ACTIVE_MOUSE_STATES_COUNT; i++) {
+        if(ActiveMouseStates[i] != 0) {
+            if (activityCode == 0) {
+                activityCode = i;
+            } else if (activityCode < ACTIVE_MOUSE_STATES_COUNT) {
+                activityCode += ACTIVE_MOUSE_STATES_COUNT;
+            }
+        }
+    }
+    return activityCode;
+}
+
 void MouseController_ProcessMouseActions()
 {
+    uint8_t activityType = 0;
     mouseElapsedTime = Timer_GetElapsedTimeAndSetCurrent(&mouseUsbReportUpdateTime);
 
     processMouseKineticState(&MouseMoveState);
+    if(MouseMoveState.xOut != 0 || MouseMoveState.yOut != 0) {
+        activityType += 1;
+    }
     ActiveUsbMouseReport->x = MouseMoveState.xOut;
     ActiveUsbMouseReport->y = MouseMoveState.yOut;
     MouseMoveState.xOut = 0;
     MouseMoveState.yOut = 0;
 
     processMouseKineticState(&MouseScrollState);
+    if(MouseScrollState.xOut != 0 || MouseScrollState.yOut != 0) {
+        activityType += 2;
+    }
     ActiveUsbMouseReport->wheelX = MouseScrollState.xOut;
     ActiveUsbMouseReport->wheelY = MouseScrollState.yOut;
     MouseScrollState.xOut = 0;
     MouseScrollState.yOut = 0;
 
+    if(TouchpadUsbMouseReport.x != 0 || TouchpadUsbMouseReport.y != 0) {
+        activityType += 4;
+    }
     ActiveUsbMouseReport->x += TouchpadUsbMouseReport.x;
     ActiveUsbMouseReport->y += TouchpadUsbMouseReport.y;
     TouchpadUsbMouseReport.x = 0;
@@ -218,6 +258,9 @@ void MouseController_ProcessMouseActions()
     for (uint8_t moduleId=0; moduleId<UHK_MODULE_MAX_COUNT; moduleId++) {
         uhk_module_state_t *moduleState = UhkModuleStates + moduleId;
         if (moduleState->pointerCount) {
+            if(moduleState->pointerDelta.x != 0 || moduleState->pointerDelta.y != 0) {
+                activityType += 8;
+            }
             if (moduleState->moduleId == ModuleId_KeyClusterLeft) {
                 ActiveUsbMouseReport->wheelX += moduleState->pointerDelta.x;
                 ActiveUsbMouseReport->wheelY -= moduleState->pointerDelta.y;
@@ -228,6 +271,11 @@ void MouseController_ProcessMouseActions()
             moduleState->pointerDelta.x = 0;
             moduleState->pointerDelta.y = 0;
         }
+    }
+
+    if(activityType != 0) {
+        LastMouseActivityType = activityType;
+        LastMouseActivityStateCode = computeStateCode();
     }
 
 //  The following line makes the firmware crash for some reason:

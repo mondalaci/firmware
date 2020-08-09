@@ -46,6 +46,9 @@
 
     extern bool ActiveMouseStates[ACTIVE_MOUSE_STATES_COUNT];
 
+    extern uint8_t LastMouseActivityType;
+    extern uint8_t LastMouseActivityStateCode;
+
 // Functions:
 
     void MouseController_ActivateDirectionSigns(uint8_t state);

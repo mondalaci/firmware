@@ -275,6 +275,52 @@ static inline void preprocessKeyState(key_state_t *keyState)
 
 uint32_t LastUsbGetKeyboardStateRequestTimestamp;
 
+static uint8_t countActiveKeys() {
+    uint8_t c = 0;
+    for (uint8_t slotId=0; slotId<SLOT_COUNT; slotId++) {
+        for (uint8_t keyId=0; keyId<MAX_KEY_COUNT_PER_MODULE; keyId++) {
+            key_state_t *keyState = &KeyStates[slotId][keyId];
+            if (KeyState_NonZero(keyState)) {
+                c++;
+            }
+        }
+    }
+    return c;
+}
+
+static char numAsHexDigit(uint8_t num) {
+    if(num < 10) {
+        return '0' + num;
+    } else if (num < 10+26){
+        return 'A' + num;
+    } else {
+        return '?';
+    }
+}
+
+static void printDbgOutput() {
+    char buff[3];
+    buff[0] = numAsHexDigit(countActiveKeys());
+    buff[1] = numAsHexDigit(LastMouseActivityStateCode);
+    buff[2] = numAsHexDigit(LastMouseActivityType);
+    LedDisplay_SetText(3, buff);
+    LastMouseActivityStateCode = 0;
+    LastMouseActivityType = 0;
+}
+
+static void handleDbgOutput() {
+    key_state_t *testKeyState = &KeyStates[SlotId_LeftKeyboardHalf][0];
+    static bool lastActive = false;
+    bool nowActive = KeyState_Active(testKeyState);
+    if(!lastActive && nowActive) {
+        printDbgOutput();
+    }
+    if(lastActive && !nowActive) {
+        LedDisplay_UpdateText();
+    }
+    lastActive = nowActive;
+}
+
 static void handleUsbStackTestMode() {
     if (TestUsbStack) {
         static bool simulateKeypresses, isEven, isEvenMedia;
@@ -332,6 +378,8 @@ static void updateActiveUsbReports(void)
     LedDisplay_SetIcon(LedDisplayIcon_Agent, CurrentTime - LastUsbGetKeyboardStateRequestTimestamp < 1000);
 
     handleUsbStackTestMode();
+
+    handleDbgOutput();
 
     if ( PostponerCore_IsActive() ) {
         PostponerCore_RunPostponedEvents();

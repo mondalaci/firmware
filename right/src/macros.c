@@ -2,6 +2,7 @@
 #include "config_parser/parse_macro.h"
 #include "config_parser/config_globals.h"
 #include "timer.h"
+#include "mouse_controller.h"
 
 macro_reference_t AllMacros[MAX_MACRO_NUM];
 uint8_t AllMacrosCount;
@@ -344,6 +345,9 @@ bool processMoveMouseAction(void)
         MacroMouseReport.y = 0;
         inMotion = false;
     } else {
+        if(LastMouseActivityType < 16) {
+            LastMouseActivityType += 16;
+        }
         MacroMouseReport.x = currentMacroAction.moveMouse.x;
         MacroMouseReport.y = currentMacroAction.moveMouse.y;
         inMotion = true;
