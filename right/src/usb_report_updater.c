@@ -296,7 +296,7 @@ static char numAsHexDigit(uint8_t num) {
     if(num < 10) {
         return '0' + num;
     } else if (num < 10+26){
-        return 'A' + num;
+        return 'A' + num - 10;
     } else {
         return '?';
     }
@@ -356,8 +356,15 @@ static void checkMemCorruptions() {
             buff[1] = 'C';
             buff[2] = numAsHexDigit(i);
             LedDisplay_SetText(3, buff);
+            *DBGMCA[i] = 0x1248;
         }
     }
+}
+
+static void writeMC() {
+    static uint8_t idx = 0;
+    idx = (idx+1) % DBGMCCOUNT;
+    *DBGMCA[idx] = 0;
 }
 
 static void handleDbgOutput() {
@@ -366,6 +373,9 @@ static void handleDbgOutput() {
     bool nowActive = KeyState_Active(testKeyState);
     if(!lastActive && nowActive) {
         printDbgOutput();
+        if(ActiveLayer == LayerId_Fn) {
+            writeMC();
+        }
     }
     if(lastActive && !nowActive) {
         LedDisplay_UpdateText();
