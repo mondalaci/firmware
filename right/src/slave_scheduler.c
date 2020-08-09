@@ -57,6 +57,9 @@ uhk_slave_t Slaves[] = {
     },
 };
 
+
+uint16_t DBGMC14 = 0x1248;
+
 static void slaveSchedulerCallback(I2C_Type *base, i2c_master_handle_t *handle, status_t previousStatus, void *userData)
 {
     bool isFirstCycle = true;

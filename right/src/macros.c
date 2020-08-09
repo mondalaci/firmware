@@ -12,6 +12,8 @@ usb_basic_keyboard_report_t MacroBasicKeyboardReport;
 usb_media_keyboard_report_t MacroMediaKeyboardReport;
 usb_system_keyboard_report_t MacroSystemKeyboardReport;
 
+uint16_t DBGMC7 = 0x1248;
+
 static uint8_t currentMacroIndex;
 static uint16_t currentMacroActionIndex;
 static macro_action_t currentMacroAction;

@@ -24,6 +24,9 @@ static uint8_t buffer[2];
 int16_t deltaX;
 int16_t deltaY;
 
+
+uint16_t DBGMC15 = 0x1248;
+
 status_t TouchpadDriver_Update(uint8_t uhkModuleDriverId)
 {
     status_t status = kStatus_Uhk_IdleSlave;

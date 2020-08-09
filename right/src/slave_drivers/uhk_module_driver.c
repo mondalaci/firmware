@@ -10,6 +10,8 @@
 
 uhk_module_state_t UhkModuleStates[UHK_MODULE_MAX_COUNT];
 
+uint16_t DBGMC4 = 0x1248;
+
 uint8_t UhkModuleSlaveDriver_SlotIdToDriverId(uint8_t slotId)
 {
     return slotId-1;

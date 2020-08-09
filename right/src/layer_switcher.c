@@ -10,6 +10,9 @@ bool ActiveLayerHeld = false;
 static layer_id_t toggledLayer = LayerId_Base;
 static layer_id_t heldLayer = LayerId_Base;
 
+
+uint16_t DBGMC11 = 0x1248;
+
 /**
  * General logic.
  *

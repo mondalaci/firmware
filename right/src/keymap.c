@@ -14,6 +14,9 @@ keymap_reference_t AllKeymaps[MAX_KEYMAP_NUM] = {
     }
 };
 
+
+uint16_t DBGMC9 = 0x1248;
+
 uint8_t AllKeymapsCount;
 uint8_t DefaultKeymapIndex;
 uint8_t CurrentKeymapIndex = 0;
@@ -532,3 +535,5 @@ key_action_t CurrentKeymap[LAYER_COUNT][SLOT_COUNT][MAX_KEY_COUNT_PER_MODULE] = 
         }
     },
 };
+
+uint16_t DBGMC10 = 0x1248;

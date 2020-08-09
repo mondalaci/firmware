@@ -6,6 +6,8 @@
 uint8_t KeyBacklightBrightness = 0xff;
 uint8_t LedDriverValues[LED_DRIVER_MAX_COUNT][LED_DRIVER_LED_COUNT];
 
+uint16_t DBGMC5 = 0x1248;
+
 static led_driver_state_t ledDriverStates[LED_DRIVER_MAX_COUNT] = {
     {
         .i2cAddress = I2C_ADDRESS_IS31FL3731_RIGHT,

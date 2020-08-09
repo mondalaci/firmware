@@ -5,6 +5,9 @@ uint32_t UsbMouseActionCounter;
 static usb_mouse_report_t usbMouseReports[2];
 usb_mouse_report_t* ActiveUsbMouseReport = usbMouseReports;
 
+
+uint16_t DBGMC16 = 0x1248;
+
 usb_mouse_report_t* GetInactiveUsbMouseReport(void)
 {
     return ActiveUsbMouseReport == usbMouseReports ? usbMouseReports+1 : usbMouseReports;

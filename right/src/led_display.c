@@ -108,6 +108,8 @@ static const uint16_t letterToSegmentMap[] = {
 static const uint8_t layerLedIds[LAYER_COUNT-1] = {13, 29, 45};
 static const uint8_t iconLedIds[LedDisplayIcon_Count] = {8, 9, 10};
 
+uint16_t DBGMC6 = 0x1248;
+
 #define maxSegmentChars 3
 #define ledCountPerChar 14
 static const uint8_t segmentLedIds[maxSegmentChars][ledCountPerChar] = {

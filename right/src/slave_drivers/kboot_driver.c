@@ -4,6 +4,9 @@
 
 kboot_driver_state_t KbootDriverState;
 
+
+uint16_t DBGMC8 = 0x1248;
+
 static uint8_t rxBuffer[KBOOT_PACKAGE_MAX_LENGTH];
 static uint8_t pingCommand[] = {0x5a, 0xa6};
 static uint8_t resetCommand[] = {0x5a, 0xa4, 0x04, 0x00, 0x6f, 0x46, 0x0b, 0x00, 0x00, 0x00};

@@ -20,6 +20,8 @@ static uint32_t mouseElapsedTime;
 uint8_t LastMouseActivityType = 0;
 uint8_t LastMouseActivityStateCode = 0;
 
+uint16_t DBGMC3 = 0x1248;
+
 bool ActiveMouseStates[ACTIVE_MOUSE_STATES_COUNT];
 
 mouse_kinetic_state_t MouseMoveState = {

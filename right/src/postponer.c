@@ -11,6 +11,9 @@ uint8_t cyclesUntilActivation = 0;
 key_state_t* Postponer_NextEventKey;
 uint32_t lastPressTime;
 
+
+uint16_t DBGMC13 = 0x1248;
+
 #define POS(idx) ((bufferPosition + (idx)) % POSTPONER_BUFFER_SIZE)
 
 static void consumeEvent(uint8_t count)

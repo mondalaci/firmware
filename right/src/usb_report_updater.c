@@ -22,8 +22,12 @@
 #include "layer_switcher.h"
 #include "mouse_controller.h"
 
+uint16_t DBGMC1 = 0x1248;
+
 bool TestUsbStack = false;
 static key_action_t actionCache[SLOT_COUNT][MAX_KEY_COUNT_PER_MODULE];
+
+uint16_t DBGMC2 = 0x1248;
 
 volatile uint8_t UsbReportUpdateSemaphore = 0;
 
@@ -308,6 +312,54 @@ static void printDbgOutput() {
     LastMouseActivityType = 0;
 }
 
+extern uint16_t DBGMC1;
+extern uint16_t DBGMC2;
+extern uint16_t DBGMC3;
+extern uint16_t DBGMC4;
+extern uint16_t DBGMC5;
+extern uint16_t DBGMC6;
+extern uint16_t DBGMC7;
+extern uint16_t DBGMC8;
+extern uint16_t DBGMC9;
+extern uint16_t DBGMC10;
+extern uint16_t DBGMC11;
+extern uint16_t DBGMC13;
+extern uint16_t DBGMC14;
+extern uint16_t DBGMC15;
+extern uint16_t DBGMC16;
+
+#define DBGMCCOUNT 15
+uint16_t* DBGMCA[DBGMCCOUNT] = {
+        &DBGMC1,
+        &DBGMC2,
+        &DBGMC3,
+        &DBGMC4,
+        &DBGMC5,
+        &DBGMC6,
+        &DBGMC7,
+        &DBGMC8,
+        &DBGMC9,
+        &DBGMC10,
+        &DBGMC11,
+        &DBGMC13,
+        &DBGMC14,
+        &DBGMC15,
+        &DBGMC16,
+
+};
+
+static void checkMemCorruptions() {
+    for(int i = 0; i < DBGMCCOUNT; i++) {
+        if(*DBGMCA[i] != 0x1248) {
+            char buff[3];
+            buff[0] = 'M';
+            buff[1] = 'C';
+            buff[2] = numAsHexDigit(i);
+            LedDisplay_SetText(3, buff);
+        }
+    }
+}
+
 static void handleDbgOutput() {
     key_state_t *testKeyState = &KeyStates[SlotId_LeftKeyboardHalf][0];
     static bool lastActive = false;
@@ -380,6 +432,8 @@ static void updateActiveUsbReports(void)
     handleUsbStackTestMode();
 
     handleDbgOutput();
+
+    checkMemCorruptions();
 
     if ( PostponerCore_IsActive() ) {
         PostponerCore_RunPostponedEvents();
