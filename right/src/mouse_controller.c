@@ -14,6 +14,8 @@
 #include "slave_drivers/touchpad_driver.h"
 #include "mouse_controller.h"
 #include "slave_scheduler.h"
+#include "layer_switcher.h"
+#include "usb_report_updater.h"
 
 static uint32_t mouseUsbReportUpdateTime = 0;
 static uint32_t mouseElapsedTime;
@@ -23,10 +25,7 @@ uint8_t ToggledMouseStates[ACTIVE_MOUSE_STATES_COUNT];
 
 bool CompensateDiagonalSpeed = false;
 
-static float expDriver(int16_t x, int16_t y);
-static void recalculateSpeed(int16_t inx, int16_t iny);
-
-static float expDriver(int16_t x, int16_t y);
+static float expDriver(float x, float y);
 static void recalculateSpeed(int16_t inx, int16_t iny);
 
 mouse_kinetic_state_t MouseMoveState = {
@@ -214,11 +213,11 @@ static void processMouseKineticState(mouse_kinetic_state_t *kineticState)
 }
 
 uint8_t touchpadScrollDivisor = 8;
-static void processTouchpadActions() {
+static void processTouchpadActions(float* outX, float*outY) {
     recalculateSpeed(TouchpadEvents.x, TouchpadEvents.y);
     float q = expDriver(TouchpadEvents.x, TouchpadEvents.y);
-    ActiveUsbMouseReport->x += q*TouchpadEvents.x;
-    ActiveUsbMouseReport->y += q*TouchpadEvents.y;
+    *outX += q*TouchpadEvents.x;
+    *outY += q*TouchpadEvents.y;
     TouchpadEvents.x = 0;
     TouchpadEvents.y = 0;
 
@@ -271,32 +270,42 @@ static void recalculateSpeed(int16_t inx, int16_t iny) {
 static float minSpeedCoef = 0.5f;
 // This means that this speed will be scaled 1:1 w.r.t. native speed.
 // Peek speeds of the trackball are around 5000-8000px/s
-static float midSpeed = 2000;
+static float midSpeed = 3000;
 static float midSpeedCoef = 1.0f;
+static float maxSpeedCoef = 8.0f;
 // Precompute the logarithms as:
 // expBase = midSpeedCoef/minSpeedCoef;
 // expShift = log(minSpeedCoef)/log(expBase);
 static float expBase = 2.0f;
 static float expShift = -1.0f;
 
-static float expDriver(int16_t x, int16_t y)
+static float expDriver(float x, float y)
 {
     float origNormSpeed = avgSpeedPerS/midSpeed;
-    return pow(expBase, origNormSpeed + expShift);
+    //exponential multiplier
+    //float exp = pow(expBase, origNormSpeed + expShift);
+    //return MIN(exp, maxSpeedCoef);
+
+    //linear multiplier
+    //return minSpeedCoef + origNormSpeed*(midSpeedCoef-minSpeedCoef);
+
+    //square root multiplier
+    return 2*minSpeedCoef * pow(origNormSpeed, midSpeedCoef - minSpeedCoef);
 }
 
 void MouseController_SetExpDriverParams(float minSpeedCoef_, float midSpeed_, float midSpeedCoef_)
 {
-    expBase = midSpeedCoef/minSpeedCoef;
-    expShift = log(minSpeedCoef)/log(expBase);
     minSpeedCoef = minSpeedCoef_;
     midSpeed = midSpeed_;
     midSpeedCoef = midSpeedCoef_;
+    expBase = midSpeedCoef/minSpeedCoef;
+    expShift = log(minSpeedCoef)/log(expBase);
 }
 
 
-void inertiaDriver(int16_t x, int16_t y, int16_t* outx, int16_t* outy)
+void inertiaDriver(float x, float y, float* outx, float* outy)
 {
+    const float inertiaTrashold = 100.0f;
     static int16_t inerX = 0;
     static int16_t inerY = 0;
     static double inerLen = 0;
@@ -317,20 +326,22 @@ void inertiaDriver(int16_t x, int16_t y, int16_t* outx, int16_t* outy)
 
     /* first we handle inertia potential */
     /* 10 is to preserve necessary precision */
-    if(len > 10.0f) {
+    if(len > 5.0f) {
         double projectionLength = (acumX*lastX + acumY*lastY)/(len*inertiaCredit);
-        coef = MAX(pow(projectionLength, 2), 0.2);
+        coef = MAX(projectionLength, 0.2f);
 
         inertiaCredit = inertiaCredit*coef + len;
         lastX = lastX*coef + acumX;
         lastY = lastY*coef + acumY;
         acumX = 0;
         acumY = 0;
+    } else if(len > 0.0f) {
+
     }
 
     /* if current movement is faster than inertia, update inertia */
     double currentLen = sqrt(x*x + y*y);
-    if(inertiaCredit > 100 && inerLen < currentLen && coef > 0.5f) {
+    if(inertiaCredit > inertiaTrashold && inerLen < currentLen && coef > 0.5f) {
           inerLen = currentLen;
           inerX = x;
           inerY = y;
@@ -338,15 +349,12 @@ void inertiaDriver(int16_t x, int16_t y, int16_t* outx, int16_t* outy)
     }
 
     /* if we can apply inertia, do so */
-    if(inertiaCredit > 100 && inerLen*inerCof > 1.0f && inerLen > currentLen) {
+    if(inertiaCredit > inertiaTrashold && inerLen*inerCof > 0.01f && inerLen > currentLen) {
         *outx = inerCof * inerX + x;
         *outy = inerCof * inerY + y;
-        if(inerLen*inerCof > 5.0f)
-            inerCof = inerCof * inerFalloff;
-        else
-            inerCof = inerCof * inerFalloff2;
+        inerCof = inerCof * (1.0f - 0.01f*inerLen*inerCof);
     } else {
-        if(inertiaCredit > 100 && inerLen*inerCof <= 10.0f) {
+        if(inerLen > currentLen) {
             lastX = 0;
             lastY = 0;
             inertiaCredit = 0;
@@ -357,8 +365,22 @@ void inertiaDriver(int16_t x, int16_t y, int16_t* outx, int16_t* outy)
     }
 }
 
+#define NONE 0
+#define LX 1
+#define LY 2
+
 void MouseController_ProcessMouseActions()
 {
+    const uint8_t wC = 1;
+    static uint8_t wLastX = NONE;
+    static int8_t wX = 0;
+    static int8_t wY = 0;
+    static uint32_t lastUpdate = 0;
+
+    static float sumX = 0.0f;
+    static float sumY = 0.0f;
+    bool moveDeltaChanged = false;
+
     mouseElapsedTime = Timer_GetElapsedTimeAndSetCurrent(&mouseUsbReportUpdateTime);
 
     processMouseKineticState(&MouseMoveState);
@@ -374,41 +396,103 @@ void MouseController_ProcessMouseActions()
     MouseScrollState.yOut = 0;
 
     if (Slaves[SlaveId_RightTouchpad].isConnected) {
-        processTouchpadActions();
+        moveDeltaChanged = true;
+        processTouchpadActions(&sumX, &sumY);
     }
 
     for (uint8_t moduleId=0; moduleId<UHK_MODULE_MAX_COUNT; moduleId++) {
         uhk_module_state_t *moduleState = UhkModuleStates + moduleId;
         if (moduleState->pointerCount) {
+            moveDeltaChanged = true;
             switch(moduleState -> moduleId) {
             case ModuleId_KeyClusterLeft:
-                ActiveUsbMouseReport->wheelX += moduleState->pointerDelta.x;
-                ActiveUsbMouseReport->wheelY -= moduleState->pointerDelta.y;
+                //ActiveUsbMouseReport->wheelX += moduleState->pointerDelta.x;
+                //ActiveUsbMouseReport->wheelY -= moduleState->pointerDelta.y;
+                if(moduleState -> pointerDelta.x != 0 || moduleState -> pointerDelta.y != 0) {
+                    if(CurrentTime - lastUpdate > 500) {
+                        wX = 0;
+                        wY = 0;
+                        wLastX = NONE;
+                    }
+                    lastUpdate = CurrentTime;
+                }
+
+                wX += moduleState->pointerDelta.x;
+                wY += moduleState->pointerDelta.y;
+
+                if((wX >= wC && wLastX == LX) || wX >= wC*2) {
+                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_RIGHT_ARROW;
+                    wX = 0;
+                    wY = 0;
+                    wLastX = LX;
+                }
+                if((wX <= -wC && wLastX == LX) || wX <= -wC*2) {
+                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_LEFT_ARROW;
+                    wX = 0;
+                    wY = 0;
+                    wLastX = LX;
+                }
+                if((wY >= wC && wLastX == LY) || wY >= wC*2) {
+                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_DOWN_ARROW;
+                    wX = 0;
+                    wY = 0;
+                    wLastX = LY;
+                }
+                if((wY <= -wC && wLastX == LY) || wY <= -wC*2) {
+                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_UP_ARROW;
+                    wX = 0;
+                    wY = 0;
+                    wLastX = LY;
+                }
                 break;
             case ModuleId_TouchpadRight:
                 /** Nothing is here, look elsewhere! */
                 break;
             case ModuleId_TrackballRight:
             {
+                float x, y;
                 //this recalculates average speed, which is needed for the inertia and exponent drivers
                 recalculateSpeed(moduleState -> pointerDelta.x, moduleState -> pointerDelta.y);
-                int16_t x = moduleState->pointerDelta.x;
-                int16_t y = moduleState -> pointerDelta.y;
-                float q = expDriver(x, y);
-                x = x*q;
-                y = y*q;
-                //inertiaDriver(q*moduleState->pointerDelta.x, q*moduleState->pointerDelta.y, &x, &y);
-                ActiveUsbMouseReport->x += x;
-                ActiveUsbMouseReport->y -= y;
+                x = (int16_t)moduleState->pointerDelta.x;
+                y = (int16_t)moduleState->pointerDelta.y;
+                float q = 1.0f;
+                q = expDriver(x, y);
+                x *= q;
+                y *= q;
+                //inertiaDriver(x, y, &x, &y);
+                sumX += x;
+                sumY -= y;
             }
                 break;
             case ModuleId_TrackpointRight:
-                ActiveUsbMouseReport->x += moduleState->pointerDelta.x;
-                ActiveUsbMouseReport->y -= moduleState->pointerDelta.y;
+                sumX += (int16_t)moduleState->pointerDelta.x;
+                sumY -= (int16_t)moduleState->pointerDelta.y;
                 break;
             }
             moduleState->pointerDelta.x = 0;
             moduleState->pointerDelta.y = 0;
+        }
+    }
+
+    bool scrollMode = ActiveLayer == LayerId_Mouse || ActiveLayer == LayerId_Fn;
+    float scrollSpeedDivisor = 8.0f;
+    if(moveDeltaChanged) {
+        float xSumInt;
+        float ySumInt;
+        if(scrollMode) {
+            sumX /= scrollSpeedDivisor;
+            sumY /= scrollSpeedDivisor;
+        }
+        sumX = modff(sumX, &xSumInt);
+        sumY = modff(sumY, &ySumInt);
+        if(scrollMode) {
+            ActiveUsbMouseReport->wheelX += xSumInt;
+            ActiveUsbMouseReport->wheelY -= ySumInt;
+            sumX *= scrollSpeedDivisor;
+            sumY *= scrollSpeedDivisor;
+        } else {
+            ActiveUsbMouseReport->x += xSumInt;
+            ActiveUsbMouseReport->y += ySumInt;
         }
     }
 
