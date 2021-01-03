@@ -286,11 +286,24 @@ static float expDriver(float x, float y)
     //float exp = pow(expBase, origNormSpeed + expShift);
     //return MIN(exp, maxSpeedCoef);
 
+    static bool lastLine = true;
+    if((CurrentTime & 16384) == 0) {
     //linear multiplier
-    //return minSpeedCoef + origNormSpeed*(midSpeedCoef-minSpeedCoef);
+        if(!lastLine) {
+            LedDisplay_SetText(3, "LIN");
+            lastLine = true;
+        }
+    return minSpeedCoef + origNormSpeed*(midSpeedCoef-minSpeedCoef);
 
+    }
+    else {
     //square root multiplier
+        if(lastLine) {
+            LedDisplay_SetText(3, "SRT");
+            lastLine = false;
+        }
     return 2*minSpeedCoef * pow(origNormSpeed, midSpeedCoef - minSpeedCoef);
+    }
 }
 
 void MouseController_SetExpDriverParams(float minSpeedCoef_, float midSpeed_, float midSpeedCoef_)
