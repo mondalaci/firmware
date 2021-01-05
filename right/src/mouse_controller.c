@@ -287,7 +287,7 @@ static float expDriver(float x, float y)
     //return MIN(exp, maxSpeedCoef);
 
     static bool lastLine = true;
-    if((CurrentTime & 16384) == 0) {
+    if((CurrentTime & (1<<15)) == 0) {
     //linear multiplier
         if(!lastLine) {
             LedDisplay_SetText(3, "LIN");
@@ -384,14 +384,17 @@ void inertiaDriver(float x, float y, float* outx, float* outy)
 
 void MouseController_ProcessMouseActions()
 {
-    const uint8_t wC = 1;
+    const uint8_t wC = 10;
+    const uint8_t wTrsh = 2;
     static uint8_t wLastX = NONE;
     static int8_t wX = 0;
     static int8_t wY = 0;
     static uint32_t lastUpdate = 0;
+    static uint32_t lastTick = 0;
 
     static float sumX = 0.0f;
     static float sumY = 0.0f;
+    static bool firstTick = false;
     bool moveDeltaChanged = false;
 
     mouseElapsedTime = Timer_GetElapsedTimeAndSetCurrent(&mouseUsbReportUpdateTime);
@@ -419,44 +422,44 @@ void MouseController_ProcessMouseActions()
             moveDeltaChanged = true;
             switch(moduleState -> moduleId) {
             case ModuleId_KeyClusterLeft:
-                //ActiveUsbMouseReport->wheelX += moduleState->pointerDelta.x;
-                //ActiveUsbMouseReport->wheelY -= moduleState->pointerDelta.y;
-                if(moduleState -> pointerDelta.x != 0 || moduleState -> pointerDelta.y != 0) {
-                    if(CurrentTime - lastUpdate > 500) {
-                        wX = 0;
-                        wY = 0;
-                        wLastX = NONE;
-                    }
-                    lastUpdate = CurrentTime;
-                }
-
-                wX += moduleState->pointerDelta.x;
-                wY += moduleState->pointerDelta.y;
-
-                if((wX >= wC && wLastX == LX) || wX >= wC*2) {
-                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_RIGHT_ARROW;
-                    wX = 0;
-                    wY = 0;
-                    wLastX = LX;
-                }
-                if((wX <= -wC && wLastX == LX) || wX <= -wC*2) {
-                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_LEFT_ARROW;
-                    wX = 0;
-                    wY = 0;
-                    wLastX = LX;
-                }
-                if((wY >= wC && wLastX == LY) || wY >= wC*2) {
-                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_DOWN_ARROW;
-                    wX = 0;
-                    wY = 0;
-                    wLastX = LY;
-                }
-                if((wY <= -wC && wLastX == LY) || wY <= -wC*2) {
-                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_UP_ARROW;
-                    wX = 0;
-                    wY = 0;
-                    wLastX = LY;
-                }
+                ActiveUsbMouseReport->wheelX += moduleState->pointerDelta.x;
+                ActiveUsbMouseReport->wheelY -= moduleState->pointerDelta.y;
+//                if(moduleState -> pointerDelta.x != 0 || moduleState -> pointerDelta.y != 0) {
+//                    if(CurrentTime - lastUpdate > 1000) {
+//                        wX = 0;
+//                        wY = 0;
+//                        wLastX = NONE;
+//                    }
+//                    lastUpdate = CurrentTime;
+//                }
+//
+//                wX += moduleState->pointerDelta.x;
+//                wY += moduleState->pointerDelta.y;
+//
+//                if((wX >= wC && wLastX == LX) || wX >= wC*wTrsh) {
+//                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_RIGHT_ARROW;
+//                    wX = 0;
+//                    wY = 0;
+//                    wLastX = LX;
+//                }
+//                if((wX <= -wC && wLastX == LX) || wX <= -wC*wTrsh) {
+//                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_LEFT_ARROW;
+//                    wX = 0;
+//                    wY = 0;
+//                    wLastX = LX;
+//                }
+//                if((wY >= wC && wLastX == LY) || wY >= wC*wTrsh) {
+//                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_DOWN_ARROW;
+//                    wX = 0;
+//                    wY = 0;
+//                    wLastX = LY;
+//                }
+//                if((wY <= -wC && wLastX == LY) || wY <= -wC*wTrsh) {
+//                    ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_UP_ARROW;
+//                    wX = 0;
+//                    wY = 0;
+//                    wLastX = LY;
+//                }
                 break;
             case ModuleId_TouchpadRight:
                 /** Nothing is here, look elsewhere! */
@@ -487,7 +490,8 @@ void MouseController_ProcessMouseActions()
         }
     }
 
-    bool scrollMode = ActiveLayer == LayerId_Mouse || ActiveLayer == LayerId_Fn;
+    bool scrollMode = ActiveLayer == LayerId_Mouse;
+    bool caretMode = ActiveLayer == LayerId_Fn;
     float scrollSpeedDivisor = 8.0f;
     if(moveDeltaChanged) {
         float xSumInt;
@@ -503,6 +507,64 @@ void MouseController_ProcessMouseActions()
             ActiveUsbMouseReport->wheelY -= ySumInt;
             sumX *= scrollSpeedDivisor;
             sumY *= scrollSpeedDivisor;
+        } else if (caretMode) {
+            if(xSumInt != 0 || ySumInt != 0) {
+                if(firstTick && CurrentTime - lastUpdate < 100 && false) {
+                    xSumInt = 0;
+                    ySumInt = 0;
+                } else {
+                    firstTick = false;
+
+                    if(CurrentTime - lastUpdate > 500) {
+                        wX = 0;
+                        wY = 0;
+                        wLastX = NONE;
+                    }
+
+                    lastUpdate = CurrentTime;
+                }
+            }
+
+            wX += xSumInt;
+            wY += ySumInt;
+
+#define FIRST_TICK(ax) (ax > wC && wLastX == NONE)
+#define FIRST_TICKB(ax) (ax > wC && wLastX == NONE)
+
+            uint8_t prevMode = wLastX;
+
+            if((wX >= wC && wLastX == LX) || wX >= wC*wTrsh || FIRST_TICK(wX)) {
+                ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_RIGHT_ARROW;
+                wX = 0;
+                wY = 0;
+                wLastX = LX;
+                lastTick = CurrentTime;
+            }
+            if((wX <= -wC && wLastX == LX) || wX <= -wC*wTrsh || FIRST_TICK(-wX)) {
+                ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_LEFT_ARROW;
+                wX = 0;
+                wY = 0;
+                wLastX = LX;
+                lastTick = CurrentTime;
+            }
+            if((wY >= wC && wLastX == LY) || wY >= wC*wTrsh || FIRST_TICK(wY)) {
+                ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_DOWN_ARROW;
+                wX = 0;
+                wY = 0;
+                wLastX = LY;
+                lastTick = CurrentTime;
+            }
+            if((wY <= -wC && wLastX == LY) || wY <= -wC*wTrsh || FIRST_TICK(-wY)) {
+                ActiveUsbBasicKeyboardReport->scancodes[basicScancodeIndex++] = HID_KEYBOARD_SC_UP_ARROW;
+                wX = 0;
+                wY = 0;
+                wLastX = LY;
+                lastTick = CurrentTime;
+            }
+
+            if(wLastX != NONE && prevMode == NONE) {
+                firstTick = true;
+            }
         } else {
             ActiveUsbMouseReport->x += xSumInt;
             ActiveUsbMouseReport->y += ySumInt;
